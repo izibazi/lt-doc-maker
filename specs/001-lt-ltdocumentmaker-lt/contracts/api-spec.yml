@@ -1,0 +1,691 @@
+openapi: 3.0.3
+info:
+  title: LT資料作成ツール API
+  description: ライトニングトーク資料作成のためのRESTful API
+  version: 1.0.0
+  contact:
+    name: LT Document Maker
+    
+servers:
+  - url: http://localhost:3000/api
+    description: 開発環境
+  - url: https://lt-doc-maker.example.com/api
+    description: 本番環境 (AWS)
+
+paths:
+  # 文書管理エンドポイント
+  /documents:
+    get:
+      summary: ユーザーの文書一覧取得
+      tags: [Documents]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, in_progress, completed, exported]
+          description: 文書ステータスでフィルタ
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: 文書一覧取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+          
+    post:
+      summary: 新規文書作成
+      tags: [Documents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentRequest'
+      responses:
+        '201':
+          description: 文書作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /documents/{documentId}:
+    get:
+      summary: 特定文書の詳細取得
+      tags: [Documents]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 文書詳細取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+          
+    put:
+      summary: 文書内容更新
+      tags: [Documents]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDocumentRequest'
+      responses:
+        '200':
+          description: 文書更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+          
+    delete:
+      summary: 文書削除
+      tags: [Documents]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 文書削除成功
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # エクスポート機能
+  /documents/{documentId}/export:
+    post:
+      summary: 文書をMarkdown形式でエクスポート
+      tags: [Export]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: エクスポート成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # テンプレート管理
+  /templates:
+    get:
+      summary: 利用可能テンプレート一覧取得
+      tags: [Templates]
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [default, custom]
+          description: テンプレートタイプでフィルタ
+      responses:
+        '200':
+          description: テンプレート一覧取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /templates/{templateId}:
+    get:
+      summary: 特定テンプレートの詳細取得
+      tags: [Templates]
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: テンプレート詳細取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # 文書生成エンドポイント
+  /generate:
+    post:
+      summary: テンプレートとユーザー入力から文書生成
+      tags: [Generation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateDocumentRequest'
+      responses:
+        '200':
+          description: 文書生成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateDocumentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # バリデーション
+  /validate:
+    post:
+      summary: 文書内容のバリデーション（時間制限チェック等）
+      tags: [Validation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateContentRequest'
+      responses:
+        '200':
+          description: バリデーション結果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    # 文書関連スキーマ
+    DocumentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 100
+        content:
+          $ref: '#/components/schemas/DocumentContent'
+        template:
+          $ref: '#/components/schemas/Template'
+        metadata:
+          $ref: '#/components/schemas/DocumentMetadata'
+        status:
+          type: string
+          enum: [draft, in_progress, completed, exported]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, title, content, template, metadata, status, createdAt, updatedAt]
+
+    DocumentListResponse:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentSummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+      required: [documents, total, limit, offset]
+
+    DocumentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, in_progress, completed, exported]
+        estimatedDuration:
+          type: string
+          description: "推定発表時間（例: '4m 30s'）"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, title, status, estimatedDuration, createdAt, updatedAt]
+
+    CreateDocumentRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          minLength: 1
+        templateId:
+          type: string
+          format: uuid
+        initialContent:
+          $ref: '#/components/schemas/DocumentContent'
+      required: [title, templateId]
+
+    UpdateDocumentRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          minLength: 1
+        content:
+          $ref: '#/components/schemas/DocumentContent'
+        status:
+          type: string
+          enum: [draft, in_progress, completed, exported]
+
+    DocumentContent:
+      type: object
+      properties:
+        introduction:
+          $ref: '#/components/schemas/ContentSection'
+        mainPoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentSection'
+          minItems: 1
+          maxItems: 3
+        conclusion:
+          $ref: '#/components/schemas/ContentSection'
+      required: [introduction, mainPoints, conclusion]
+
+    ContentSection:
+      type: object
+      properties:
+        heading:
+          type: string
+          maxLength: 200
+          minLength: 1
+        body:
+          type: string
+          maxLength: 2000
+          minLength: 1
+        bulletPoints:
+          type: array
+          items:
+            type: string
+            maxLength: 500
+          maxItems: 10
+      required: [heading, body, bulletPoints]
+
+    DocumentMetadata:
+      type: object
+      properties:
+        estimatedDuration:
+          type: string
+          description: "推定発表時間（例: '4m 30s'）"
+        wordCount:
+          type: integer
+          minimum: 0
+        lastExported:
+          type: string
+          format: date-time
+          nullable: true
+        exportCount:
+          type: integer
+          minimum: 0
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 50
+          maxItems: 10
+      required: [estimatedDuration, wordCount, exportCount, tags]
+
+    # テンプレート関連スキーマ
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 50
+        structure:
+          $ref: '#/components/schemas/TemplateStructure'
+        prompts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Prompt'
+        isDefault:
+          type: boolean
+      required: [id, name, structure, prompts, isDefault]
+
+    TemplateResponse:
+      allOf:
+        - $ref: '#/components/schemas/Template'
+        - type: object
+          properties:
+            createdAt:
+              type: string
+              format: date-time
+          required: [createdAt]
+
+    TemplateListResponse:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateResponse'
+      required: [templates]
+
+    TemplateStructure:
+      type: object
+      properties:
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionDefinition'
+        maxSections:
+          type: integer
+          minimum: 1
+          maximum: 10
+        timeConstraints:
+          $ref: '#/components/schemas/TimeConstraints'
+      required: [sections, maxSections, timeConstraints]
+
+    SectionDefinition:
+      type: object
+      properties:
+        name:
+          type: string
+        required:
+          type: boolean
+        maxLength:
+          type: integer
+          minimum: 1
+      required: [name, required, maxLength]
+
+    TimeConstraints:
+      type: object
+      properties:
+        maxDuration:
+          type: string
+          description: "最大発表時間（例: '5m'）"
+        recommendedDuration:
+          type: string
+          description: "推奨発表時間（例: '4m'）"
+      required: [maxDuration, recommendedDuration]
+
+    Prompt:
+      type: object
+      properties:
+        section:
+          type: string
+        question:
+          type: string
+        placeholder:
+          type: string
+        required:
+          type: boolean
+      required: [section, question, placeholder, required]
+
+    # エクスポート関連スキーマ
+    ExportRequest:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [markdown]
+          default: markdown
+        notionCompatible:
+          type: boolean
+          default: true
+        includeMetadata:
+          type: boolean
+          default: true
+      required: [format]
+
+    ExportResponse:
+      type: object
+      properties:
+        content:
+          type: string
+          description: "エクスポートされたMarkdown内容"
+        filename:
+          type: string
+          description: "推奨ファイル名"
+        size:
+          type: integer
+          description: "コンテンツサイズ（バイト）"
+        exportedAt:
+          type: string
+          format: date-time
+      required: [content, filename, size, exportedAt]
+
+    # 生成関連スキーマ
+    GenerateDocumentRequest:
+      type: object
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        userInput:
+          type: object
+          additionalProperties:
+            type: string
+          description: "テンプレートプロンプトに対する回答"
+      required: [templateId, userInput]
+
+    GenerateDocumentResponse:
+      type: object
+      properties:
+        content:
+          $ref: '#/components/schemas/DocumentContent'
+        estimatedDuration:
+          type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+          description: "コンテンツ改善提案"
+      required: [content, estimatedDuration, suggestions]
+
+    # バリデーション関連スキーマ
+    ValidateContentRequest:
+      type: object
+      properties:
+        content:
+          $ref: '#/components/schemas/DocumentContent'
+      required: [content]
+
+    ValidationResponse:
+      type: object
+      properties:
+        isValid:
+          type: boolean
+        estimatedDuration:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+        suggestions:
+          type: array
+          items:
+            type: string
+      required: [isValid, estimatedDuration, issues, suggestions]
+
+    ValidationIssue:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [duration_exceeded, content_too_long, missing_required, formatting_issue]
+        section:
+          type: string
+          description: "問題のあるセクション"
+        message:
+          type: string
+          description: "問題の詳細"
+        severity:
+          type: string
+          enum: [error, warning, info]
+      required: [type, message, severity]
+
+    # エラーレスポンス
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: "エラーコード"
+        message:
+          type: string
+          description: "エラーメッセージ"
+        details:
+          type: object
+          description: "詳細情報"
+          additionalProperties: true
+      required: [error, message]
+
+  responses:
+    BadRequest:
+      description: 不正なリクエスト
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    Unauthorized:
+      description: 認証が必要
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    NotFound:
+      description: リソースが見つからない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    InternalServerError:
+      description: サーバー内部エラー
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Documents
+    description: 文書管理機能
+  - name: Templates
+    description: テンプレート管理機能
+  - name: Export
+    description: エクスポート機能
+  - name: Generation
+    description: 文書生成機能
+  - name: Validation
+    description: バリデーション機能
